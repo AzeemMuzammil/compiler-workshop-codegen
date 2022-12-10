@@ -5,8 +5,8 @@ define i64 @main() {
 
 define void @printSignedInt(i64 %signedInt) {
 entry:
-  %isPositive = icmp slt i64 %signedInt, 0
-  br i1 %isPositive, label %printMinus, label %printDigits
+ %isNeg = icmp slt i64 %signedInt, 0
+ br i1 %isNeg, label %printMinus, label %printDigits
 printMinus:
   call i32 @putchar(i32 45) ; 45 is the ascii code for '-'
   %positiveInt = sub nsw i64 0, %signedInt
