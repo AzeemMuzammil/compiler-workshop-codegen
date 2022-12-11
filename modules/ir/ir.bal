@@ -13,7 +13,7 @@ public type Block record {|
     Insn[] insns;
 |};
 
-public type Variable Identifier;
+public type Variable Identifier; // Variables are mutable, ie: you can assign
 public type Operand Variable|int;
 public type Label string;
 

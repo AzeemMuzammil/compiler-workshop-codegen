@@ -25,9 +25,9 @@ public function codeGen(ir:Function[] funcs) returns ll:Module {
     ll:PointerValue r3 = builder.alloca("i64");
     builder.store(r0, r3);
     ll:PointerValue r4 = builder.alloca("i64");
+    builder.store(r1, r4);
 
     // vars: ["%result"]
-    builder.store(r1, r4);
     ll:PointerValue r5 = builder.alloca("i64");
 
     // { kind: "add", op: ["%a", "%b"], result: "%result" }
