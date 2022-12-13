@@ -9,6 +9,7 @@ Compiler workshop - codegen
 Assume
 * Given a language where all variables are ints (64 signed ints)
 * All functions return an int
+* First block is always named `entry`
 
 
 Bonus
@@ -18,4 +19,4 @@ Bonus
 
 
 Bonus 2
-* a test case for Euclid's algorithm
+* Write a test case for Euclid's algorithm and make it pass
