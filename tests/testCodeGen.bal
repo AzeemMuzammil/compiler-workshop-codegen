@@ -71,7 +71,7 @@ function testCodeGenFib() returns error? {
   %7 = alloca i64
   %8 = alloca i64
   %9 = load i64, i64* %2
-  %10 = icmp sle i64 %9, 2
+  %10 = icmp slt i64 %9, 2
   %11 = zext i1 %10 to i64
   store i64 %11, i64* %3
   %12 = load i64, i64* %3
