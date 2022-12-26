@@ -78,18 +78,8 @@ function generateForInsns(ll:Builder llBuilder, ir:Insn[] insns, map<ll:Function
             ir:Operand rhsOp = insn.op[1];
             ll:Value lhsVal;
             ll:Value rhsVal;
-            if lhsOp is int {
-                lhsVal = ll:constInt("i64", lhsOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(lhsOp);
-                lhsVal = llBuilder.load(allocPtr);
-            }
-            if rhsOp is int {
-                rhsVal = ll:constInt("i64", rhsOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(rhsOp);
-                rhsVal = llBuilder.load(allocPtr);
-            }
+            lhsVal = getArithmeticOpVal(llBuilder, memAllocs, lhsOp);
+            rhsVal = getArithmeticOpVal(llBuilder, memAllocs, rhsOp);
             ll:Value arrRes = llBuilder.iArithmeticWrap("add", lhsVal, rhsVal);
             ll:PointerValue resPtr = memAllocs.get(insn.result);
             llBuilder.store(arrRes, resPtr);
@@ -98,18 +88,8 @@ function generateForInsns(ll:Builder llBuilder, ir:Insn[] insns, map<ll:Function
             ir:Operand rhsOp = insn.op[1];
             ll:Value lhsVal;
             ll:Value rhsVal;
-            if lhsOp is int {
-                lhsVal = ll:constInt("i64", lhsOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(lhsOp);
-                lhsVal = llBuilder.load(allocPtr);
-            }
-            if rhsOp is int {
-                rhsVal = ll:constInt("i64", rhsOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(rhsOp);
-                rhsVal = llBuilder.load(allocPtr);
-            }
+            lhsVal = getArithmeticOpVal(llBuilder, memAllocs, lhsOp);
+            rhsVal = getArithmeticOpVal(llBuilder, memAllocs, rhsOp);
             ll:Value cmpRes = llBuilder.iCmp("slt", lhsVal, rhsVal);
             ll:Value extRes = llBuilder.zExt(cmpRes, "i64");
             ll:PointerValue resPtr = memAllocs.get(insn.result);
@@ -117,12 +97,7 @@ function generateForInsns(ll:Builder llBuilder, ir:Insn[] insns, map<ll:Function
         } else if insn is ir:JumpIf {
             ir:Operand cdnOp = insn.op[0];
             ll:Value cdnVal;
-            if cdnOp is int {
-                cdnVal = ll:constInt("i64", cdnOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(cdnOp);
-                cdnVal = llBuilder.load(allocPtr);
-            }
+            cdnVal = getArithmeticOpVal(llBuilder, memAllocs, cdnOp);
             ll:Value cdnTruncVal = llBuilder.trunc(cdnVal, "i1");
             ir:Label ifTrue = insn.ifTrue;
             ir:Label ifFalse = insn.ifFalse;
@@ -142,30 +117,16 @@ function generateForInsns(ll:Builder llBuilder, ir:Insn[] insns, map<ll:Function
             ir:Operand rhsOp = insn.op[1];
             ll:Value lhsVal;
             ll:Value rhsVal;
-            if lhsOp is int {
-                lhsVal = ll:constInt("i64", lhsOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(lhsOp);
-                lhsVal = llBuilder.load(allocPtr);
-            }
-            if rhsOp is int {
-                rhsVal = ll:constInt("i64", rhsOp);
-            } else {
-                ll:PointerValue allocPtr = memAllocs.get(rhsOp);
-                rhsVal = llBuilder.load(allocPtr);
-            }
+            lhsVal = getArithmeticOpVal(llBuilder, memAllocs, lhsOp);
+            rhsVal = getArithmeticOpVal(llBuilder, memAllocs, rhsOp);
             ll:Value arrRes = llBuilder.iArithmeticWrap("sub", lhsVal, rhsVal);
             ll:PointerValue resPtr = memAllocs.get(insn.result);
             llBuilder.store(arrRes, resPtr);
         } else if insn is ir:Call {
             ll:Value[] callParams = [];
             foreach ir:Operand op in insn.op {
-                if op is int {
-                    callParams.push(ll:constInt("i64", op));
-                } else {
-                    ll:PointerValue allocPtr = memAllocs.get(op);
-                    callParams.push(llBuilder.load(allocPtr));
-                }
+                ll:Value callParam = getArithmeticOpVal(llBuilder, memAllocs, op);
+                callParams.push(callParam);
             }
             ll:PointerValue resPtr = memAllocs.get(insn.result);
             ll:Value? callRes = llBuilder.call(funcDefns.get(insn.name), callParams);
@@ -174,4 +135,15 @@ function generateForInsns(ll:Builder llBuilder, ir:Insn[] insns, map<ll:Function
             }
         }
     }
+}
+
+function getArithmeticOpVal(ll:Builder llBuilder, map<ll:PointerValue> memAllocs, ir:Operand op) returns ll:Value {
+    ll:Value opVal;
+    if op is int {
+        opVal = ll:constInt("i64", op);
+    } else {
+        ll:PointerValue allocPtr = memAllocs.get(op);
+        opVal = llBuilder.load(allocPtr);
+    }
+    return opVal;
 }

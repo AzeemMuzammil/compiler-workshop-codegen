@@ -154,8 +154,7 @@ modules = [
 	{org = "manurangaperera", packageName = "codegen", moduleName = "codegen"},
 	{org = "manurangaperera", packageName = "codegen", moduleName = "codegen.err"},
 	{org = "manurangaperera", packageName = "codegen", moduleName = "codegen.ir"},
-	{org = "manurangaperera", packageName = "codegen", moduleName = "codegen.llvm"},
-	{org = "manurangaperera", packageName = "codegen", moduleName = "codegen.print.llvm"}
+	{org = "manurangaperera", packageName = "codegen", moduleName = "codegen.llvm"}
 ]
 
 
