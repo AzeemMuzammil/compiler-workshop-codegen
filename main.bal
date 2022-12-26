@@ -9,35 +9,169 @@ public function main(string irFilePath, string outputLlFilePath) returns error? 
 }
 
 public function codeGen(ir:Function[] funcs) returns ll:Module {
-    // Change the following code to use `funcs` variable and generate code
-    ll:Context context = new;
-    ll:Builder builder = context.createBuilder();
-    ll:Module module = context.createModule();
+    ll:Context llContext = new;
+    ll:Builder llBuilder = llContext.createBuilder();
+    ll:Module llModule = llContext.createModule();
 
-    // name: "add", params: ["%a", "%b"]
-    ll:FunctionDefn foo = module.addFunctionDefn("add", { returnType: "i64", paramTypes: ["i64", "i64"] });
-    ll:BasicBlock entryBlock = foo.appendBasicBlock();
-    builder.positionAtEnd(entryBlock);
+    // Function Definitions
+    map<ll:FunctionDefn> funcDefns = {};
+    foreach ir:Function func in funcs {
+        ll:Type[] paramTypes = [];
+        foreach int _ in 0..<func.params.length() {
+            ll:Type i64Type = "i64";
+            paramTypes.push(i64Type);
+        }
+        ll:FunctionDefn funcDefn =
+            llModule.addFunctionDefn(func.name, { returnType: "i64", paramTypes: paramTypes.cloneReadOnly()});
+        funcDefns[func.name] = funcDefn;
 
-    // params: ["%a", "%b"]
-    ll:Value r0 = foo.getParam(0);
-    ll:Value r1 = foo.getParam(1);
-    ll:PointerValue r3 = builder.alloca("i64");
-    builder.store(r0, r3);
-    ll:PointerValue r4 = builder.alloca("i64");
-    builder.store(r1, r4);
+        // Function Blocks
+        map<ir:Block> insnBlocks = {};
+        map<ll:BasicBlock> basicBlocks = {};
+        foreach [string, ir:Block] block in func.blocks.entries() {
+            insnBlocks[block[0]] = block[1];
+            basicBlocks[block[0]] = funcDefn.appendBasicBlock(block[0] == "entry" ? () : block[0]);
+        }
+        llBuilder.positionAtEnd(basicBlocks.get("entry"));
 
-    // vars: ["%result"]
-    ll:PointerValue r5 = builder.alloca("i64");
+        // Function Parameters
+        map<ll:Value> funcParams = {};
+        foreach [int, ir:Identifier] param in func.params.enumerate() {
+            funcParams[param[1]] = funcDefn.getParam(param[0]);
+        }
 
-    // { kind: "add", op: ["%a", "%b"], result: "%result" }
-    ll:Value r6 = builder.load(r3);
-    ll:Value r7 = builder.load(r4);
-    ll:Value r8 = builder.iArithmeticWrap("add", r6, r7);
-    builder.store(r8, r5);
+        // -> param allocations
+        map<ll:PointerValue> memAllocs = {};
+        foreach [string, ll:Value] param in funcParams.entries() {
+            ll:PointerValue allocPtr = llBuilder.alloca("i64");
+            llBuilder.store(param[1], allocPtr);
+            memAllocs[param[0]] = allocPtr;
+        }
 
-    // { kind: "return", op: ["%result"] }
-    ll:Value r9 = builder.load(r5);
-    builder.ret(r9);
-    return module;
+        // Function Vars
+        // -> Function var allocations
+        foreach ir:Identifier 'var in func.vars {
+            ll:PointerValue allocPtr = llBuilder.alloca("i64");
+            memAllocs['var] = allocPtr;
+        }
+
+        // Entry Block
+        ir:Label[] generatedBlocks = [];
+        generateForInsns(llBuilder, insnBlocks.get("entry").insns, funcDefns, basicBlocks, insnBlocks, memAllocs, generatedBlocks);
+    }
+    return llModule;
+}
+
+function generateForInsns(ll:Builder llBuilder, ir:Insn[] insns, map<ll:FunctionDefn> funcDefns,
+        map<ll:BasicBlock> basicBlocks, map<ir:Block> insnBlocks, map<ll:PointerValue> memAllocs,
+        ir:Label[] generatedBlocks) {
+    foreach ir:Insn insn in insns {
+        if insn is ir:Return {
+            ir:Operand retOp = insn.op[0];
+            if (retOp is ir:Variable) {
+                ll:PointerValue resPtr = memAllocs.get(retOp);
+                ll:Value retVal = llBuilder.load(resPtr);
+                llBuilder.ret(retVal);
+            }
+        } else if insn is ir:Add {
+            ir:Operand lhsOp = insn.op[0];
+            ir:Operand rhsOp = insn.op[1];
+            ll:Value lhsVal;
+            ll:Value rhsVal;
+            if lhsOp is int {
+                lhsVal = ll:constInt("i64", lhsOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(lhsOp);
+                lhsVal = llBuilder.load(allocPtr);
+            }
+            if rhsOp is int {
+                rhsVal = ll:constInt("i64", rhsOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(rhsOp);
+                rhsVal = llBuilder.load(allocPtr);
+            }
+            ll:Value arrRes = llBuilder.iArithmeticWrap("add", lhsVal, rhsVal);
+            ll:PointerValue resPtr = memAllocs.get(insn.result);
+            llBuilder.store(arrRes, resPtr);
+        } else if insn is ir:LessThan {
+            ir:Operand lhsOp = insn.op[0];
+            ir:Operand rhsOp = insn.op[1];
+            ll:Value lhsVal;
+            ll:Value rhsVal;
+            if lhsOp is int {
+                lhsVal = ll:constInt("i64", lhsOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(lhsOp);
+                lhsVal = llBuilder.load(allocPtr);
+            }
+            if rhsOp is int {
+                rhsVal = ll:constInt("i64", rhsOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(rhsOp);
+                rhsVal = llBuilder.load(allocPtr);
+            }
+            ll:Value cmpRes = llBuilder.iCmp("slt", lhsVal, rhsVal);
+            ll:Value extRes = llBuilder.zExt(cmpRes, "i64");
+            ll:PointerValue resPtr = memAllocs.get(insn.result);
+            llBuilder.store(extRes, resPtr);
+        } else if insn is ir:JumpIf {
+            ir:Operand cdnOp = insn.op[0];
+            ll:Value cdnVal;
+            if cdnOp is int {
+                cdnVal = ll:constInt("i64", cdnOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(cdnOp);
+                cdnVal = llBuilder.load(allocPtr);
+            }
+            ll:Value cdnTruncVal = llBuilder.trunc(cdnVal, "i1");
+            ir:Label ifTrue = insn.ifTrue;
+            ir:Label ifFalse = insn.ifFalse;
+            llBuilder.condBr(cdnTruncVal, basicBlocks.get(ifTrue), basicBlocks.get(ifFalse));
+            llBuilder.positionAtEnd(basicBlocks.get(ifTrue));
+            if !generatedBlocks.some(block => ifTrue == block) {
+                generateForInsns(llBuilder, insnBlocks.get(ifTrue).insns, funcDefns, basicBlocks, insnBlocks, memAllocs, generatedBlocks);
+                generatedBlocks.push(ifTrue);
+            }
+            llBuilder.positionAtEnd(basicBlocks.get(ifFalse));
+            if !generatedBlocks.some(block => ifFalse == block) {
+                generateForInsns(llBuilder, insnBlocks.get(ifFalse).insns, funcDefns, basicBlocks, insnBlocks, memAllocs, generatedBlocks);
+                generatedBlocks.push(ifFalse);
+            }
+        } else if insn is ir:Subtract {
+            ir:Operand lhsOp = insn.op[0];
+            ir:Operand rhsOp = insn.op[1];
+            ll:Value lhsVal;
+            ll:Value rhsVal;
+            if lhsOp is int {
+                lhsVal = ll:constInt("i64", lhsOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(lhsOp);
+                lhsVal = llBuilder.load(allocPtr);
+            }
+            if rhsOp is int {
+                rhsVal = ll:constInt("i64", rhsOp);
+            } else {
+                ll:PointerValue allocPtr = memAllocs.get(rhsOp);
+                rhsVal = llBuilder.load(allocPtr);
+            }
+            ll:Value arrRes = llBuilder.iArithmeticWrap("sub", lhsVal, rhsVal);
+            ll:PointerValue resPtr = memAllocs.get(insn.result);
+            llBuilder.store(arrRes, resPtr);
+        } else if insn is ir:Call {
+            ll:Value[] callParams = [];
+            foreach ir:Operand op in insn.op {
+                if op is int {
+                    callParams.push(ll:constInt("i64", op));
+                } else {
+                    ll:PointerValue allocPtr = memAllocs.get(op);
+                    callParams.push(llBuilder.load(allocPtr));
+                }
+            }
+            ll:PointerValue resPtr = memAllocs.get(insn.result);
+            ll:Value? callRes = llBuilder.call(funcDefns.get(insn.name), callParams);
+            if callRes is ll:Value {
+                llBuilder.store(callRes, resPtr);
+            }
+        }
+    }
 }
